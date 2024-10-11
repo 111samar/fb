@@ -1,0 +1,230 @@
+import React, { Component } from 'react';
+import { View, Image, Text, Dimensions } from 'react-native';
+import Parse from 'parse/react-native';
+import FBSDK from 'react-native-fbsdk';
+import { Actions } from 'react-native-router-flux';
+import { connect } from 'react-redux';
+import { signupFb } from '../actions';
+import { Input, TicoModal } from './common';
+import { tico } from '../images';
+
+const { height } = Dimensions.get('window');
+const { AccessToken, LoginManager, GraphRequest, GraphRequestManager } = FBSDK;
+
+class FbSignUp extends Component {
+  state= { username: '', showModal: false, text: '' };
+
+  onPressModal() {
+    this.setState({ showModal: false });
+  }
+
+  onFail(error) {
+    this.setState({ showModal: true, text: error });
+  }
+
+  setUsername() {
+    const username = this.state.username;
+
+    if (username.length === 0) {
+      this.onFail('Please type a username!');
+      return;
+    } else if (username.length < 6) {
+      this.onFail('A good username should be more than 6 words!');
+      return;
+    } else if (username.length > 20) {
+      this.onFail('A good username should be less than 20 words!');
+      return;
+    }
+
+    const user = new Parse.User();
+
+    user.set('username', username);
+    user.set('email', 'asdfg3865@gmail.com');
+    user.set('password', '1234');
+    /*我只是要判斷username是否重複，
+    但ParseCloud一定要我輸入3個，只好這樣做*/
+
+   user.signUp()
+    .then(() => {
+    })
+    .catch((error) => {
+      console.log(error);
+      if (error.code === 202) {
+        this.onFail('This username has been used, Please try again!');
+      }
+      if (error.code === 141) {
+        this.onFail('A good username should not have special characters!');
+      }
+      if (error.code === 203) {
+        this.fbLogin();
+      } else {
+        console.log('Unknown failed, Please try again!');
+      }
+    });
+  }
+
+  fbLogin() {
+    LoginManager.logInWithReadPermissions(['email', 'public_profile', 'user_friends'])
+      .then(result => {
+        if (result.isCancelled) {
+          console.log('Login cancelled');
+        } else {
+          console.log(result);
+          AccessToken.getCurrentAccessToken()
+            .then((res) => {
+              console.log(res);
+
+              const { userID, accessToken, expirationTime } = res;
+              const username = this.state.username;
+
+              //以下為Graph API用法
+
+              const responseCallback = ((error, data) => {
+                if (error) {
+                  console.log(error);
+                } else {
+                  console.log(data);
+                  const { email, picture_small } = data;
+                  const picture = picture_small.data.url;
+                  this.props.signupFb({
+                    userID,
+                    accessToken,
+                    expirationTime,
+                    username,
+                    email,
+                    picture
+                  });
+                }
+              });
+
+              const profileRequestParams = {
+                fields: {
+                  string: 'id, name, email, picture.width(200).height(200).as(picture_small)'
+                }
+              };
+
+              const profileRequestConfig = {
+                httpMethod: 'GET',
+                version: 'v2.5',
+                parameters: profileRequestParams,
+                accessToken
+              };
+
+              const profileRequest = new GraphRequest(
+                '/me',
+                profileRequestConfig,
+                responseCallback,
+              );
+              // Start the graph request.
+              new GraphRequestManager().addRequest(profileRequest).start();
+            });
+        }
+       })
+       .catch((error) => {
+          console.log(error);
+       });
+  }
+
+  backBottom() {
+    Actions.pop();
+  }
+
+  render() {
+    const {
+      containerStyle,
+      imageStyle,
+      textStyle,
+      bottomStyle,
+      bottomTextStyle,
+      keyTextStyle
+    } = styles;
+    return (
+      <View style={containerStyle}>
+        <TicoModal
+          visible={this.state.showModal}
+          onPress={this.onPressModal.bind(this)}
+        >
+          {this.state.text}
+        </TicoModal>
+        <Image
+          style={imageStyle}
+          source={tico}
+        />
+        <View style={{ flex: 1 }}>
+            <Text style={textStyle}>
+              Set an username:
+            </Text>
+            <Input
+              placeholder="Username"
+              value={this.state.username}
+              onChangeText={username => this.setState({ username })}
+            />
+            <View style={{ flex: 1 }} />
+        </View>
+        <View style={bottomStyle}>
+          <Text onPress={this.backBottom.bind(this)} style={bottomTextStyle}>Back</Text>
+          <Text style={{ paddingBottom: 2 }}>|</Text>
+          <Text onPress={this.setUsername.bind(this)} style={keyTextStyle}>Confirm</Text>
+        </View>
+      </View>
+    );
+  }
+}
+
+const styles = {
+  containerStyle: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingLeft: 20,
+    paddingRight: 20
+  },
+  imageStyle: {
+    flex: 1,
+    width: 60,
+    //marginTop: height / 15,
+    justifyContent: 'center',
+    alignSelf: 'center',
+    resizeMode: Image.resizeMode.contain
+  },
+  textStyle: {
+    //marginTop: height / 10,
+    flex: 1,
+    fontSize: 14,
+    paddingBottom: 10
+  },
+  bottomStyle: {
+    flex: 1,
+    paddingBottom: 50,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center'
+  },
+  bottomTextStyle: {
+    color: '#bbb',
+    flex: 1,
+    fontSize: 16,
+    textAlign: 'center'
+  },
+  keyTextStyle: {
+    flex: 1,
+    fontSize: 16,
+    textAlign: 'center'
+  },
+};
+
+const mapStateToProps = ({ auth }) => {
+  const { user } = auth;
+  return { user };
+};
+
+export default connect(mapStateToProps, { signupFb })(FbSignUp);
+Footer
+© 2024 GitHub, Inc.
+Footer navigation
+Terms
+Privacy
+Security
+Status
+Docs
+Contact
+Manage cookies
